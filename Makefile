@@ -5,7 +5,7 @@ CFLAGS ?= -Wall
 CFLAGS += $(shell $(PKG_CONFIG) --cflags $(LIBS))
 LDLIBS = $(shell $(PKG_CONFIG) --libs $(LIBS))
 
-SRCS = xkb-monitor.c layout_registry.c
+SRCS = xkb-monitor.c layout-registry.c
 OBJS = $(SRCS:.c=.o)
 
 .PHONY: all debug release clean

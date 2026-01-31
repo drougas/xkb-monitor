@@ -1,4 +1,4 @@
-#include "layout_registry.h"
+#include "layout-registry.h"
 
 #include <stdio.h>
 #include <stdlib.h>
