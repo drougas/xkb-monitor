@@ -1,5 +1,9 @@
+PKG_CONFIG ?= pkg-config
+LIBS = wayland-client xkbcommon xkbregistry
+
 CFLAGS ?= -Wall
-LDLIBS = -lwayland-client -lxkbcommon -lxkbregistry
+CFLAGS += $(shell $(PKG_CONFIG) --cflags $(LIBS))
+LDLIBS = $(shell $(PKG_CONFIG) --libs $(LIBS))
 
 SRCS = xkb-monitor.c layout_registry.c
 OBJS = $(SRCS:.c=.o)

@@ -6,93 +6,142 @@
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbregistry.h>
 
-static int64_t is_keymap_layout(struct xkb_keymap* keymap, char const* description) {
-  xkb_layout_index_t num_layouts = xkb_keymap_num_layouts(keymap);
-  for (xkb_layout_index_t i = 0; i < num_layouts; i++) {
-    char const* name = xkb_keymap_layout_get_name(keymap, i);
-    if (name && strcmp(name, description) == 0) {
-      return i;
+static char* extract_layout_symbol(char const* layout_desc) {
+  // Extract two-letter symbol from layout name
+  // Common formats: "English (US)", "us", "Russian", etc.
+  char* symbol = (char*)malloc(3 * sizeof(char));
+  symbol[0] = symbol[1] = symbol[2] = 0;
+
+  // Look for parentheses pattern like "English (US)"
+  char const* const paren = layout_desc ? strchr(layout_desc, '(') : NULL;
+  if (paren && paren[1] && paren[2] && paren[1] != ')' && paren[2] != ')') {
+    symbol[0] = paren[1];
+    symbol[1] = paren[2];
+  } else if (layout_desc && *layout_desc) {
+    // If it's already short (2-3 chars), use first 2 chars
+    symbol[0] = layout_desc[0];
+    symbol[1] = layout_desc[1];
+  }
+
+  for (int i = 0; i < 2; ++i) {
+    if (symbol[i] >= 'A' && symbol[i] <= 'Z') {
+      symbol[i] += ('a' - 'A');
+    } else if (symbol[i] < 'a' || symbol[i] > 'z') {
+      symbol[i] = '?';
     }
   }
-  return -1;
+
+  return symbol;
 }
 
-layout_entry* layout_registry_init(struct xkb_keymap* keymap) {
-  if (!keymap) {
-    return NULL;
+static char* extract_layout_name(char const* layout_desc) {
+  char const* end = layout_desc ? strchr(layout_desc, '(') : NULL;
+  uint8_t spacesFound = 0;
+  if (end == NULL && layout_desc != NULL) {
+    end = layout_desc + strlen(layout_desc);
+  }
+  while (end != layout_desc && *end == ' ') {
+    --end;
+    spacesFound = 1;
+  }
+  end += spacesFound;
+
+  size_t const len = end - layout_desc;
+  char* name = (char*)malloc((len + 1) * sizeof(char));
+
+  memcpy(name, layout_desc, len);
+  name[len] = '\0';
+  return name;
+}
+
+layout_entries layout_registry_init(struct xkb_keymap* keymap) {
+  xkb_layout_index_t const count = keymap ? xkb_keymap_num_layouts(keymap) : 0;
+  layout_entry* const entries = (count > 0) ? (layout_entry*)malloc(count * sizeof(layout_entry)) : NULL;
+
+  for (xkb_layout_index_t i = 0; i < count; i++) {
+    char const* desc = xkb_keymap_layout_get_name(keymap, i);
+    entries[i].description = strdup(desc ? desc : "??");
+    entries[i].name = NULL;
+    entries[i].variant = NULL;
+    entries[i].symbol = NULL;
   }
 
   struct rxkb_context* ctx = rxkb_context_new(RXKB_CONTEXT_NO_FLAGS);
-  if (!ctx) {
-    return NULL;
+  if (ctx) {
+    if (!rxkb_context_parse_default_ruleset(ctx)) {
+      rxkb_context_unref(ctx);
+      ctx = NULL;
+    }
   }
 
-  if (!rxkb_context_parse_default_ruleset(ctx)) {
-    rxkb_context_unref(ctx);
-    return NULL;
-  }
-
-  layout_entry* entries = NULL;
-  struct rxkb_layout* layout = rxkb_layout_first(ctx);
+  struct rxkb_layout* layout = ctx ? rxkb_layout_first(ctx) : NULL;
   while (layout) {
-    char const* const name = rxkb_layout_get_name(layout);
-    char const* const variant = rxkb_layout_get_variant(layout);
     char const* const desc = rxkb_layout_get_description(layout);
+    xkb_layout_index_t i = 0;
 
-    int64_t const idx = (name && desc) ? is_keymap_layout(keymap, desc) : -1;
-    layout_entry* entry = (idx >= 0) ? malloc(sizeof(layout_entry)) : NULL;
-    if (entry) {
-      entry->description = strdup(desc);
-      // For variants, combine layout+variant as the short name
-      if (variant && *variant) {
-        size_t len = strlen(name) + strlen(variant) + 2;
-        entry->name = malloc(len);
-        if (entry->name) {
-          snprintf(entry->name, len, "%s(%s)", name, variant);
-        }
-      } else {
-        entry->name = strdup(name);
+    while ((i < count) && (entries[i].name || strcmp(entries[i].description, desc))) {
+      ++i;
+    }
+
+    if (i < count) {
+      char const* const name = rxkb_layout_get_name(layout);
+      char const* const variant = rxkb_layout_get_variant(layout);
+      if (name && *name) {
+        entries[i].name = strdup(name);
+        entries[i].variant = strdup(variant ? variant : "");
       }
-      entry->idx = (xkb_layout_index_t)idx;
-      entry->next = entries;
-      entries = entry;
     }
 
     layout = rxkb_layout_next(layout);
   }
-
-  rxkb_context_unref(ctx);
-  return entries;
-}
-
-char const* layout_registry_lookup_name(layout_entry const* entries, char const* description) {
-  if (!description) {
-    return NULL;
+  if (ctx != NULL) {
+    rxkb_context_unref(ctx);
+    ctx = NULL;
   }
-  for (layout_entry const* e = entries; e; e = e->next) {
-    if (strcmp(e->description, description) == 0) {
-      return e->name;
+
+  for (xkb_layout_index_t i = 0; i < count; i++) {
+    layout_entry* entry = &entries[i];
+    if (entry->name == NULL) {
+      entry->name = extract_layout_name(entry->description);
+    }
+    if (entry->variant == NULL) {
+      entry->variant = strdup("");
+    }
+    if (entry->name[0] && entry->name[1]) {
+      entry->symbol = extract_layout_symbol(entry->name);
+    } else {
+      entry->symbol = extract_layout_symbol(entry->description);
     }
   }
-  return NULL;
+
+  layout_entries const ret = {
+    .entries = entries,
+    .count = count,
+  };
+  return ret;
 }
 
-char const* layout_registry_lookup_idx(layout_entry const* entries, xkb_layout_index_t idx) {
-  for (layout_entry const* e = entries; e; e = e->next) {
-    if (e->idx == idx) {
-      return e->name;
-    }
+layout_entry const* layout_registry_lookup_idx(layout_entries const lentries, xkb_layout_index_t idx) {
+  static layout_entry const empty_entry = {
+    .description = "!!",
+    .name = "!!",
+    .variant = "!!",
+    .symbol = "!!",
+  };
+  return (idx < lentries.count) ? &(lentries.entries)[idx] : &empty_entry;
+}
+
+void layout_registry_cleanup(layout_entries* lentries) {
+  layout_entry* const entries = lentries ? lentries->entries : NULL;
+  xkb_layout_index_t const count = entries ? lentries->count : 0;
+  for (xkb_layout_index_t i = 0; i < count; ++i) {
+    free(entries[i].symbol);
+    free(entries[i].variant);
+    free(entries[i].name);
+    free(entries[i].description);
   }
-  return NULL;
-}
-
-void layout_registry_cleanup(layout_entry* entries) {
-  layout_entry* e = entries;
-  while (e) {
-    layout_entry* next = e->next;
-    free(e->description);
-    free(e->name);
-    free(e);
-    e = next;
+  if (lentries) {
+    lentries->count = 0;
+    lentries->entries = NULL;
   }
 }

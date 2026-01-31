@@ -34,8 +34,7 @@ typedef struct app_state_t
   struct xkb_keymap* xkb_keymap;
   struct xkb_state* xkb_state;
 
-  // Layout registry entries (when use_registry is set)
-  layout_entry* layout_entries;
+  layout_entries layout_entries;
 
   uint32_t seat_version;
 
@@ -44,36 +43,7 @@ typedef struct app_state_t
   // Options
   uint8_t json_format;
   uint8_t symbol_only;
-  uint8_t use_registry;
 } app_state;
-
-static void get_layout_symbol(char const* layout_name, char* symbol) {
-  // Extract two-letter symbol from layout name
-  // Common formats: "English (US)", "us", "Russian", etc.
-
-  // Look for parentheses pattern like "English (US)"
-  char const* const paren = layout_name ? strchr(layout_name, '(') : NULL;
-  if (paren && paren[1] && paren[2] && paren[1] != ')' && paren[2] != ')') {
-    symbol[0] = paren[1];
-    symbol[1] = paren[2];
-  } else if (layout_name && *layout_name) {
-    // If it's already short (2-3 chars), use first 2 chars
-    symbol[0] = layout_name[0];
-    symbol[1] = layout_name[1];
-  } else {
-    symbol[0] = symbol[1] = '?';
-  }
-
-  symbol[0] += (symbol[0] >= 'A' && symbol[0] <= 'Z') ? ('a' - 'A') : 0;
-  symbol[1] += (symbol[1] >= 'A' && symbol[1] <= 'Z') ? ('a' - 'A') : 0;
-  if (symbol[0] < 'a' || symbol[0] > 'z') {
-    symbol[0] = '?';
-  }
-  if (symbol[1] < 'a' || symbol[1] > 'z') {
-    symbol[1] = '?';
-  }
-  symbol[2] = '\0';
-}
 
 static void print_keyboard_state(app_state* state) {
   if (!state->xkb_state || !state->xkb_keymap) {
@@ -104,28 +74,18 @@ static void print_keyboard_state(app_state* state) {
   last->num_lock = num_lock;
   last->scroll_lock = scroll_lock;
 
-  char const* layout_name = xkb_keymap_layout_get_name(state->xkb_keymap, layout);
-  char const* symbol = NULL;
-  char symbol_buf[3] = {0};
-
-  if (state->layout_entries) {
-    symbol = layout_registry_lookup_idx(state->layout_entries, layout);
-  }
-  if (!symbol) {
-    get_layout_symbol(layout_name, symbol_buf);
-    symbol = symbol_buf;
-  }
-
-  if (!layout_name || *layout_name == '\0') {
-    layout_name = "Unknown";
-  }
+  layout_entry const* const entry = layout_registry_lookup_idx(state->layout_entries, layout);
 
   if (state->json_format) {
     printf(
-      "{\"layout\":\"%s\",\"symbol\":\"%s\",\"caps\":%s,\"num\":%s,\"scroll\":%s}\n", layout_name, symbol,
-      caps_lock ? "true" : "false", num_lock ? "true" : "false", scroll_lock ? "true" : "false");
+      "{\"index\":%u,\"description\":\"%s\",\"name\":\"%s\",\"variant\",\"%s\","
+      "\"symbol\":\"%s\",\"caps\":%s,\"num\":%s,\"scroll\":%s}\n",
+      layout, entry->description, entry->name, entry->variant, entry->symbol, caps_lock ? "true" : "false",
+      num_lock ? "true" : "false", scroll_lock ? "true" : "false");
   } else {
-    printf("%s,%s,%d,%d,%d\n", layout_name, symbol, caps_lock, num_lock, scroll_lock);
+    printf(
+      "%d,%s,%s,%s,%s,%d,%d,%d\n", layout, entry->description, entry->name, entry->variant, entry->symbol, caps_lock,
+      num_lock, scroll_lock);
   }
 }
 
@@ -144,22 +104,11 @@ static void print_symbol_keyboard_state(app_state* state) {
 
   last->layout = layout;
 
-  char const* symbol = NULL;
-  char symbol_buf[3] = {0};
-
-  if (state->layout_entries) {
-    symbol = layout_registry_lookup_idx(state->layout_entries, layout);
-  }
-  if (!symbol) {
-    char const* layout_name = xkb_keymap_layout_get_name(state->xkb_keymap, layout);
-    get_layout_symbol(layout_name, symbol_buf);
-    symbol = symbol_buf;
-  }
-
+  layout_entry const* entry = layout_registry_lookup_idx(state->layout_entries, layout);
   if (state->json_format) {
-    printf("{\"symbol\":\"%s\"}\n", symbol);
+    printf("{\"text\":\"%s\"}\n", entry->symbol);
   } else {
-    printf("%s\n", symbol);
+    printf("%s\n", entry->symbol);
   }
 }
 
@@ -210,12 +159,10 @@ static void keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t f
   state->xkb_state = xkb_state;
 
   // Initialize or reinitialize the layout registry with the new keymap
-  if (state->use_registry) {
-    layout_registry_cleanup(state->layout_entries);
-    state->layout_entries = layout_registry_init(keymap);
-    if (!state->layout_entries) {
-      fprintf(stderr, "Warning: Failed to initialize layout registry\n");
-    }
+  layout_registry_cleanup(&state->layout_entries);
+  state->layout_entries = layout_registry_init(keymap);
+  if (state->layout_entries.count == 0) {
+    fprintf(stderr, "Warning: Failed to initialize layout registry\n");
   }
 
   DEBUG("\n[Keymap loaded]");
@@ -347,17 +294,13 @@ static app_state s_state = {
 
   .json_format = 0,
   .symbol_only = 0,
-  .use_registry = 0,
 
-  .layout_entries = NULL,
+  .layout_entries = {0},
 };
 
 static void cleanup() {
   DEBUG("Cleaning up\n");
-  if (s_state.layout_entries) {
-    layout_registry_cleanup(s_state.layout_entries);
-    s_state.layout_entries = NULL;
-  }
+  layout_registry_cleanup(&s_state.layout_entries);
   if (s_state.keyboard) {
     wl_keyboard_release(s_state.keyboard);
     s_state.keyboard = NULL;
@@ -399,19 +342,17 @@ int main(int argc, char* argv[]) {
   signal(SIGTERM, signalHandler);
   setlinebuf(stdout);
 
-  for (int opt; (opt = getopt(argc, argv, "jsrh")) != -1;) {
+  for (int opt; (opt = getopt(argc, argv, "jsh")) != -1;) {
     switch (opt) {
       case 'j': s_state.json_format = 1; break;
       case 's': s_state.symbol_only = 1; break;
-      case 'r': s_state.use_registry = 1; break;
       case 'h':
         fprintf(stderr, "Usage: %s [-j] [-s] [-r]\n", argv[0]);
         fprintf(stderr, "  -j: JSON output\n");
         fprintf(stderr, "  -s: symbol only (layout changes only)\n");
-        fprintf(stderr, "  -r: use XKB registry for layout symbols (requires libxkbregistry)\n");
         fprintf(stderr, "  -js: Waybar output with CSS classes for symbols\n");
         return 0;
-      default: fprintf(stderr, "Usage: %s [-j] [-s] [-r]\n", argv[0]); return 1;
+      default: fprintf(stderr, "Usage: %s [-j] [-s]\n", argv[0]); return 1;
     }
   }
 
