@@ -6,34 +6,6 @@
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbregistry.h>
 
-static char* extract_layout_symbol(char const* layout_desc) {
-  // Extract two-letter symbol from layout name
-  // Common formats: "English (US)", "us", "Russian", etc.
-  char* symbol = (char*)malloc(3 * sizeof(char));
-  symbol[0] = symbol[1] = symbol[2] = 0;
-
-  // Look for parentheses pattern like "English (US)"
-  char const* const paren = layout_desc ? strchr(layout_desc, '(') : NULL;
-  if (paren && paren[1] && paren[2] && paren[1] != ')' && paren[2] != ')') {
-    symbol[0] = paren[1];
-    symbol[1] = paren[2];
-  } else if (layout_desc && *layout_desc) {
-    // If it's already short (2-3 chars), use first 2 chars
-    symbol[0] = layout_desc[0];
-    symbol[1] = layout_desc[1];
-  }
-
-  for (int i = 0; i < 2; ++i) {
-    if (symbol[i] >= 'A' && symbol[i] <= 'Z') {
-      symbol[i] += ('a' - 'A');
-    } else if (symbol[i] < 'a' || symbol[i] > 'z') {
-      symbol[i] = '?';
-    }
-  }
-
-  return symbol;
-}
-
 static char* extract_layout_name(char const* layout_desc) {
   char const* end = layout_desc ? strchr(layout_desc, '(') : NULL;
   uint8_t spacesFound = 0;
@@ -63,7 +35,6 @@ layout_entries layout_registry_init(struct xkb_keymap* keymap) {
     entries[i].description = strdup(desc ? desc : "??");
     entries[i].name = NULL;
     entries[i].variant = NULL;
-    entries[i].symbol = NULL;
   }
 
   struct rxkb_context* ctx = rxkb_context_new(RXKB_CONTEXT_NO_FLAGS);
@@ -107,11 +78,6 @@ layout_entries layout_registry_init(struct xkb_keymap* keymap) {
     if (entry->variant == NULL) {
       entry->variant = strdup("");
     }
-    if (entry->name[0] && entry->name[1]) {
-      entry->symbol = extract_layout_symbol(entry->name);
-    } else {
-      entry->symbol = extract_layout_symbol(entry->description);
-    }
   }
 
   layout_entries const ret = {
@@ -126,7 +92,6 @@ layout_entry const* layout_registry_lookup_idx(layout_entries const lentries, xk
     .description = "!!",
     .name = "!!",
     .variant = "!!",
-    .symbol = "!!",
   };
   return (idx < lentries.count) ? &(lentries.entries)[idx] : &empty_entry;
 }
@@ -135,7 +100,6 @@ void layout_registry_cleanup(layout_entries* lentries) {
   layout_entry* const entries = lentries ? lentries->entries : NULL;
   xkb_layout_index_t const count = entries ? lentries->count : 0;
   for (xkb_layout_index_t i = 0; i < count; ++i) {
-    free(entries[i].symbol);
     free(entries[i].variant);
     free(entries[i].name);
     free(entries[i].description);

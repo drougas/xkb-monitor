@@ -50,8 +50,8 @@ sudo cp xkb-monitor /usr/local/bin/
 ```bash
 xkb-monitor        # CSV output
 xkb-monitor -j     # JSON output
-xkb-monitor -s     # Symbol only (layout changes only)
-xkb-monitor -js    # JSON symbol only (Waybar compatible)
+xkb-monitor -n     # Name only (layout changes only)
+xkb-monitor -jn    # JSON name only (Waybar compatible)
 ```
 
 ### Output Formats
@@ -59,26 +59,26 @@ xkb-monitor -js    # JSON symbol only (Waybar compatible)
 **CSV** (default):
 
 ```
-index,description,name,variant,symbol,caps,num,scroll
-0,English (US),us,,us,0,0,0
-1,Greek,gr,,gr,0,0,0
+index,description,name,variant,caps,num,scroll
+0,English (US),us,,0,0,0
+1,Greek,gr,,0,0,0
 ```
 
 **JSON** (`xkb-monitor -j`):
 
 ```json
-{"index":0,"description":"English (US)","name":"us","variant","","symbol":"us","caps":false,"num":false,"scroll":false}
-{"index":1,"description":"Greek","name":"gr","variant","","symbol":"gr","caps":false,"num":false,"scroll":false}
+{"index":0,"description":"English (US)","name":"us","variant","","caps":false,"num":false,"scroll":false}
+{"index":1,"description":"Greek","name":"gr","variant","","caps":false,"num":false,"scroll":false}
 ```
 
-**Symbol only** (`xkb-monitor -s`):
+**Name only** (`xkb-monitor -n`):
 
 ```
 us
 gr
 ```
 
-**Symbol only - JSON** (`xkb-monitor -js`):
+**Name only - JSON** (`xkb-monitor -jn`):
 
 ```
 {"text":"us"}
@@ -91,7 +91,7 @@ Add to your Waybar config:
 
 ```json
 "custom/keyboard": {
-    "exec": "xkb-monitor -s",
+    "exec": "xkb-monitor -n",
     "format": "⌨ {}"
 }
 ```
@@ -101,7 +101,7 @@ buffer stdout. For example, use `sed -u`:
 
 ```json
   "custom/keyboard-layout": {
-    "exec": "xkb-monitor -s | sed -u 's/us/e/; s/gr/λ/'",
+    "exec": "xkb-monitor -n | sed -u 's/us/e/; s/gr/λ/'",
     "format": "⌨ {}"
   }
 ```

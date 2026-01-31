@@ -8,7 +8,6 @@ typedef struct layout_entry_t
   char* description;
   char* name;
   char* variant;
-  char* symbol;
 } layout_entry;
 
 typedef struct layout_entries_t {

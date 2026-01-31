@@ -42,7 +42,7 @@ typedef struct app_state_t
 
   // Options
   uint8_t json_format;
-  uint8_t symbol_only;
+  uint8_t name_only;
 } app_state;
 
 static void print_keyboard_state(app_state* state) {
@@ -79,12 +79,12 @@ static void print_keyboard_state(app_state* state) {
   if (state->json_format) {
     printf(
       "{\"index\":%u,\"description\":\"%s\",\"name\":\"%s\",\"variant\",\"%s\","
-      "\"symbol\":\"%s\",\"caps\":%s,\"num\":%s,\"scroll\":%s}\n",
-      layout, entry->description, entry->name, entry->variant, entry->symbol, caps_lock ? "true" : "false",
+      "\"caps\":%s,\"num\":%s,\"scroll\":%s}\n",
+      layout, entry->description, entry->name, entry->variant, caps_lock ? "true" : "false",
       num_lock ? "true" : "false", scroll_lock ? "true" : "false");
   } else {
     printf(
-      "%d,%s,%s,%s,%s,%d,%d,%d\n", layout, entry->description, entry->name, entry->variant, entry->symbol, caps_lock,
+      "%d,%s,%s,%s,%d,%d,%d\n", layout, entry->description, entry->name, entry->variant, caps_lock,
       num_lock, scroll_lock);
   }
 }
@@ -106,9 +106,9 @@ static void print_symbol_keyboard_state(app_state* state) {
 
   layout_entry const* entry = layout_registry_lookup_idx(state->layout_entries, layout);
   if (state->json_format) {
-    printf("{\"text\":\"%s\"}\n", entry->symbol);
+    printf("{\"text\":\"%s\"}\n", entry->name);
   } else {
-    printf("%s\n", entry->symbol);
+    printf("%s\n", entry->name);
   }
 }
 
@@ -166,7 +166,7 @@ static void keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t f
   }
 
   DEBUG("\n[Keymap loaded]");
-  if (state->symbol_only) {
+  if (state->name_only) {
     print_symbol_keyboard_state(state);
   } else {
     print_keyboard_state(state);
@@ -202,7 +202,7 @@ static void keyboard_modifiers(
   DEBUG(
     "\n[Modifiers/Layout changed]: serial=%u depressed=%u latched=%u locked=%u group=%u", //
     serial, mods_depressed, mods_latched, mods_locked, group);
-  if (state->symbol_only) {
+  if (state->name_only) {
     print_symbol_keyboard_state(state);
   } else {
     print_keyboard_state(state);
@@ -293,7 +293,7 @@ static app_state s_state = {
     },
 
   .json_format = 0,
-  .symbol_only = 0,
+  .name_only = 0,
 
   .layout_entries = {0},
 };
@@ -342,17 +342,17 @@ int main(int argc, char* argv[]) {
   signal(SIGTERM, signalHandler);
   setlinebuf(stdout);
 
-  for (int opt; (opt = getopt(argc, argv, "jsh")) != -1;) {
+  for (int opt; (opt = getopt(argc, argv, "jnh")) != -1;) {
     switch (opt) {
       case 'j': s_state.json_format = 1; break;
-      case 's': s_state.symbol_only = 1; break;
+      case 'n': s_state.name_only = 1; break;
       case 'h':
-        fprintf(stderr, "Usage: %s [-j] [-s] [-r]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-j] [-n] [-r]\n", argv[0]);
         fprintf(stderr, "  -j: JSON output\n");
-        fprintf(stderr, "  -s: symbol only (layout changes only)\n");
-        fprintf(stderr, "  -js: Waybar output with CSS classes for symbols\n");
+        fprintf(stderr, "  -n: name only (layout changes only)\n");
+        fprintf(stderr, "  -jn: Waybar output with CSS classes for symbols\n");
         return 0;
-      default: fprintf(stderr, "Usage: %s [-j] [-s]\n", argv[0]); return 1;
+      default: fprintf(stderr, "Usage: %s [-j] [-n]\n", argv[0]); return 1;
     }
   }
 
