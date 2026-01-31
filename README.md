@@ -1,6 +1,6 @@
 # xkb-monitor
 
-A lightweight utility that monitors keyboard state on Wayland displays. It
+A lightweight utility that monitors keyboard state on Wayland compositors. It
 reports keyboard layout changes and lock key states (Caps Lock, Num Lock,
 Scroll Lock) in real-time.
 
