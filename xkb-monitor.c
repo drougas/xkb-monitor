@@ -165,7 +165,7 @@ static void keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t f
     fprintf(stderr, "Warning: Failed to initialize layout registry\n");
   }
 
-  DEBUG("\n[Keymap loaded]");
+  DEBUG("[Keymap loaded]\n");
   if (state->name_only) {
     print_symbol_keyboard_state(state);
   } else {
@@ -175,17 +175,17 @@ static void keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t f
 
 static void keyboard_enter(
   void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface, struct wl_array* keys) {
-  DEBUG("\n[Keyboard focus gained]\n");
+  DEBUG("[Keyboard focus gained]\n");
 }
 
 static void keyboard_leave(void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface) {
-  DEBUG("\n[Keyboard focus lost]\n");
+  DEBUG("[Keyboard focus lost]\n");
 }
 
 static void keyboard_key(
   void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t time, uint32_t key, uint32_t key_state) {
   // We don't need to do anything here for monitoring state
-  DEBUG("\n[Key pressed]: %u %u\n", key, key_state);
+  DEBUG("[Key pressed]: %u %u\n", key, key_state);
 }
 
 static void keyboard_modifiers(
@@ -200,7 +200,7 @@ static void keyboard_modifiers(
   xkb_state_update_mask(state->xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
 
   DEBUG(
-    "\n[Modifiers/Layout changed]: serial=%u depressed=%u latched=%u locked=%u group=%u", //
+    "[Modifiers/Layout changed]: serial=%u depressed=%u latched=%u locked=%u group=%u\n", //
     serial, mods_depressed, mods_latched, mods_locked, group);
   if (state->name_only) {
     print_symbol_keyboard_state(state);
@@ -385,8 +385,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  DEBUG("\nMonitoring keyboard state (press Ctrl+C to exit)...\n");
-  DEBUG("Note: You need to focus this terminal window to receive keyboard events\n\n");
+  DEBUG("Monitoring keyboard state (press Ctrl+C to exit)...\n");
 
   // Main event loop
   while (wl_display_dispatch(s_state.display) != -1) {

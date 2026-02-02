@@ -104,6 +104,9 @@ void layout_registry_cleanup(layout_entries* lentries) {
     free(entries[i].name);
     free(entries[i].description);
   }
+  if (entries) {
+    free(entries);
+  }
   if (lentries) {
     lentries->count = 0;
     lentries->entries = NULL;
