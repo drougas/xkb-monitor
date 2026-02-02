@@ -78,7 +78,7 @@ static void print_keyboard_state(app_state* state) {
 
   if (state->json_format) {
     printf(
-      "{\"index\":%u,\"description\":\"%s\",\"name\":\"%s\",\"variant\",\"%s\","
+      "{\"index\":%u,\"description\":\"%s\",\"name\":\"%s\",\"variant\":\"%s\","
       "\"caps\":%s,\"num\":%s,\"scroll\":%s}\n",
       layout, entry->description, entry->name, entry->variant, caps_lock ? "true" : "false",
       num_lock ? "true" : "false", scroll_lock ? "true" : "false");
