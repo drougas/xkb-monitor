@@ -67,8 +67,8 @@ index,description,name,variant,caps,num,scroll
 **JSON** (`xkb-monitor -j`):
 
 ```json
-{"index":0,"description":"English (US)","name":"us","variant","","caps":false,"num":false,"scroll":false}
-{"index":1,"description":"Greek","name":"gr","variant","","caps":false,"num":false,"scroll":false}
+{"index":0,"description":"English (US)","name":"us","variant":"","caps":false,"num":false,"scroll":false}
+{"index":1,"description":"Greek","name":"gr","variant":"","caps":false,"num":false,"scroll":false}
 ```
 
 **Name only** (`xkb-monitor -n`):
