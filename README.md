@@ -128,6 +128,13 @@ gr
 Add to your Waybar config:
 
 ```json
+// Alternative: modules-center, or modules-left
+"modules-right": [
+  ...
+  "custom/keyboard-layout",
+  ...
+],
+
 "custom/keyboard": {
     "exec": "xkb-monitor -n",
     "format": "⌨ {}"
@@ -138,10 +145,10 @@ To process the output (ie., running `sed` etc), make sure the tool does not
 buffer stdout. For example, use `sed -u`:
 
 ```json
-  "custom/keyboard-layout": {
-    "exec": "xkb-monitor -n | sed -u 's/us/e/; s/gr/λ/'",
-    "format": "⌨ {}"
-  }
+"custom/keyboard-layout": {
+  "exec": "xkb-monitor -n | sed -u 's/us/e/; s/gr/λ/'",
+  "format": "⌨ {}"
+}
 ```
 
 ## License
