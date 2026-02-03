@@ -1,2 +1,9 @@
 *.o
 xkb-monitor
+
+wlr-layer-shell-client-protocol.h
+wlr-layer-shell-protocol.c
+wlr-layer-shell-unstable-v1.xml
+
+xdg-shell-client-protocol.h
+xdg-shell-protocol.c

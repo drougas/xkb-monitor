@@ -8,20 +8,40 @@ Tested on labwc.
 
 ## Dependencies
 
+### Required
+
 - `libwayland-client` - Wayland client library
 - `libxkbcommon` - XKB keyboard handling library
 - `libxkbregistry` - XKB registry for layout lookup (part of libxkbcommon)
 
+### Optional (for accurate initial layout reporting)
+
+- `wayland-protocols` - Wayland protocol XML files
+- `wayland-scanner` - Wayland protocol code generator
+- `curl` - For downloading wlr-layer-shell protocol
+
+When these optional dependencies are available, xkb-monitor uses
+wlr-layer-shell to query the current keyboard layout on startup. Without them,
+the initial layout may default to index 0 until a key is pressed.
+
 ### Debian / Ubuntu / Linux Mint
 
 ```bash
+# Required
 sudo apt install libwayland-dev libxkbcommon-dev
+
+# Optional (for accurate initial layout)
+sudo apt install wayland-protocols curl
 ```
 
 ### Arch Linux / Manjaro
 
 ```bash
+# Required
 sudo pacman -S wayland libxkbcommon
+
+# Optional (for accurate initial layout)
+sudo pacman -S wayland-protocols curl
 ```
 
 ## Building
@@ -30,10 +50,28 @@ sudo pacman -S wayland libxkbcommon
 make
 ```
 
+This will automatically detect if `wayland-protocols` and `wayland-scanner` are
+available. If found, the build will:
+1. Generate xdg-shell protocol files from wayland-protocols
+2. Download and generate wlr-layer-shell protocol files
+3. Enable accurate initial layout reporting
+
+To explicitly disable layer-shell support even when dependencies are available:
+
+```bash
+make SKIP_WLR_LAYER_SHELL=1
+```
+
 For a debug build with address sanitizer:
 
 ```bash
 make debug
+```
+
+To clean generated protocol files:
+
+```bash
+make distclean
 ```
 
 ## Installation

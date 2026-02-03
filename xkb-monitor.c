@@ -9,6 +9,10 @@
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
+#ifdef HAVE_LAYER_SHELL
+#include "wlr-layer-shell-client-protocol.h"
+#endif
+
 #ifndef NDEBUG
 #define DEBUG(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 #else
@@ -29,6 +33,13 @@ typedef struct app_state_t
   struct wl_registry* registry;
   struct wl_seat* seat;
   struct wl_keyboard* keyboard;
+#ifdef HAVE_LAYER_SHELL
+  struct wl_compositor* compositor;
+  struct wl_surface* surface;
+  struct zwlr_layer_shell_v1* layer_shell;
+  struct zwlr_layer_surface_v1* layer_surface;
+  uint8_t surface_configured;
+#endif
 
   struct xkb_context* xkb_context;
   struct xkb_keymap* xkb_keymap;
@@ -166,11 +177,6 @@ static void keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t f
   }
 
   DEBUG("[Keymap loaded]\n");
-  if (state->name_only) {
-    print_symbol_keyboard_state(state);
-  } else {
-    print_keyboard_state(state);
-  }
 }
 
 static void keyboard_enter(
@@ -211,7 +217,7 @@ static void keyboard_modifiers(
 
 static void keyboard_repeat_info(void* data, struct wl_keyboard* keyboard, int32_t rate, int32_t delay) {
   // Not needed for our purposes
-  DEBUG("\n[Key repeat]: %d %d\n", rate, delay);
+  DEBUG("[Key repeat]: %d %d\n", rate, delay);
 }
 
 static const struct wl_keyboard_listener keyboard_listener = {
@@ -251,6 +257,26 @@ static const struct wl_seat_listener seat_listener = {
   .name = seat_name,
 };
 
+#ifdef HAVE_LAYER_SHELL
+// Layer surface listeners
+static void layer_surface_configure(
+  void* data, struct zwlr_layer_surface_v1* layer_surface, uint32_t serial, uint32_t width, uint32_t height) {
+  app_state* state = (app_state*)data;
+  zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
+  state->surface_configured = 1;
+  DEBUG("[Layer surface configured]\n");
+}
+
+static void layer_surface_closed(void* data, struct zwlr_layer_surface_v1* layer_surface) {
+  DEBUG("[Layer surface closed]\n");
+}
+
+static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
+  .configure = layer_surface_configure,
+  .closed = layer_surface_closed,
+};
+#endif
+
 // Registry listeners
 static void registry_global(
   void* data, struct wl_registry* registry, uint32_t name, char const* interface, uint32_t version) {
@@ -260,6 +286,13 @@ static void registry_global(
     state->seat_version = version;
     state->seat = (struct wl_seat*)wl_registry_bind(registry, name, &wl_seat_interface, version < 7 ? version : 7);
     wl_seat_add_listener(state->seat, &seat_listener, state);
+#ifdef HAVE_LAYER_SHELL
+  } else if (strcmp(interface, wl_compositor_interface.name) == 0) {
+    state->compositor = (struct wl_compositor*)wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+  } else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
+    state->layer_shell =
+      (struct zwlr_layer_shell_v1*)wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1);
+#endif
   }
 }
 
@@ -277,6 +310,13 @@ static app_state s_state = {
   .registry = NULL,
   .seat = NULL,
   .keyboard = NULL,
+#ifdef HAVE_LAYER_SHELL
+  .compositor = NULL,
+  .surface = NULL,
+  .layer_shell = NULL,
+  .layer_surface = NULL,
+  .surface_configured = 0,
+#endif
 
   .xkb_context = NULL,
   .xkb_keymap = NULL,
@@ -301,6 +341,24 @@ static app_state s_state = {
 static void cleanup() {
   DEBUG("Cleaning up\n");
   layout_registry_cleanup(&s_state.layout_entries);
+#ifdef HAVE_LAYER_SHELL
+  if (s_state.layer_surface) {
+    zwlr_layer_surface_v1_destroy(s_state.layer_surface);
+    s_state.layer_surface = NULL;
+  }
+  if (s_state.surface) {
+    wl_surface_destroy(s_state.surface);
+    s_state.surface = NULL;
+  }
+  if (s_state.layer_shell) {
+    zwlr_layer_shell_v1_destroy(s_state.layer_shell);
+    s_state.layer_shell = NULL;
+  }
+  if (s_state.compositor) {
+    wl_compositor_destroy(s_state.compositor);
+    s_state.compositor = NULL;
+  }
+#endif
   if (s_state.keyboard) {
     wl_keyboard_release(s_state.keyboard);
     s_state.keyboard = NULL;
@@ -383,6 +441,53 @@ int main(int argc, char* argv[]) {
   if (!s_state.seat) {
     fprintf(stderr, "No seat found\n");
     return 1;
+  }
+
+#ifdef HAVE_LAYER_SHELL
+  if (s_state.compositor && s_state.layer_shell) {
+    DEBUG("Create a layer surface to receive keyboard events\n");
+    s_state.surface = wl_compositor_create_surface(s_state.compositor);
+    s_state.layer_surface = zwlr_layer_shell_v1_get_layer_surface(
+      s_state.layer_shell, s_state.surface, NULL, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "xkb-monitor");
+    zwlr_layer_surface_v1_add_listener(s_state.layer_surface, &layer_surface_listener, &s_state);
+    // Request exclusive keyboard focus to receive initial keyboard state
+    zwlr_layer_surface_v1_set_keyboard_interactivity(
+      s_state.layer_surface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
+    zwlr_layer_surface_v1_set_size(s_state.layer_surface, 1, 1);
+    wl_surface_commit(s_state.surface);
+
+    // Wait for surface to be configured and keyboard events
+    while ((!s_state.surface_configured || !s_state.xkb_state) && wl_display_roundtrip(s_state.display) != -1) {
+      // Keep processing until surface is configured and keyboard state is initialized
+    }
+
+    // Wait for keyboard_modifiers event with current state
+    wl_display_roundtrip(s_state.display);
+
+    // Release exclusive keyboard focus now that we have the initial state
+    zwlr_layer_surface_v1_set_keyboard_interactivity(
+      s_state.layer_surface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+    wl_surface_commit(s_state.surface);
+    wl_display_roundtrip(s_state.display);
+  } else {
+    DEBUG("Fallback: wait for keyboard state without layer shell\n");
+    while (!s_state.xkb_state && wl_display_roundtrip(s_state.display) != -1) {
+    }
+  }
+#else
+  DEBUG("Built without layer shell: wait for keyboard state\n");
+  while (!s_state.xkb_state && wl_display_roundtrip(s_state.display) != -1) {
+  }
+#endif
+
+  // If no modifiers event was received, print the current (default) state
+  if (s_state.xkb_state && s_state.last.layout == XKB_LAYOUT_INVALID) {
+    DEBUG("[No modifiers event received, printing current (default) state]\n");
+    if (s_state.name_only) {
+      print_symbol_keyboard_state(&s_state);
+    } else {
+      print_keyboard_state(&s_state);
+    }
   }
 
   DEBUG("Monitoring keyboard state (press Ctrl+C to exit)...\n");
